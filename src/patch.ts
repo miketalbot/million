@@ -1,6 +1,9 @@
+// DFS based algorithm
+
 import { OLD_VNODE_FIELD } from './constants';
 import { createElement } from './createElement';
-import { VElement, VFlags, VNode, VProps } from './structs';
+import { diff } from './diff';
+import { VDeltas, VElement, VFlags, VNode, VProps } from './structs';
 
 /**
  * Diffs two VNode props and modifies the DOM node based on the necessary changes
@@ -9,12 +12,12 @@ import { VElement, VFlags, VNode, VProps } from './structs';
  * @param {VProps} newProps - New VNode props
  */
 export const patchProps = (el: HTMLElement, oldProps: VProps, newProps: VProps): void => {
-  const cache = new Set<string>();
+  const memo = new Set<string>();
   for (const oldPropName of Object.keys(oldProps)) {
     const newPropValue = newProps[oldPropName];
     if (newPropValue) {
       el[oldPropName] = newPropValue;
-      cache.add(oldPropName);
+      memo.add(oldPropName);
     } else {
       el.removeAttribute(oldPropName);
       delete el[oldPropName];
@@ -22,7 +25,7 @@ export const patchProps = (el: HTMLElement, oldProps: VProps, newProps: VProps):
   }
 
   for (const newPropName of Object.keys(newProps)) {
-    if (!cache.has(newPropName)) {
+    if (!memo.has(newPropName)) {
       el[newPropName] = newProps[newPropName];
     }
   }
@@ -38,14 +41,38 @@ export const patchChildren = (
   el: HTMLElement,
   oldVNodeChildren: VNode[],
   newVNodeChildren: VNode[],
+  keyed = false,
 ): void => {
-  if (oldVNodeChildren) {
-    for (let i = oldVNodeChildren.length - 1; i >= 0; --i) {
-      patch(<HTMLElement | Text>el.childNodes[i], newVNodeChildren[i], oldVNodeChildren[i]);
+  if (keyed) {
+    diff(
+      <VElement[]>oldVNodeChildren,
+      <VElement[]>newVNodeChildren,
+      (delta: VDeltas, oldVElement?: VElement, newVElement?: VElement, position?: number): void => {
+        switch (delta) {
+          case VDeltas.CREATE:
+            el.insertBefore(createElement(newVElement!), el.childNodes[position!]);
+            break;
+          case VDeltas.UPDATE:
+            patch(<HTMLElement>el.childNodes[position!], newVElement!, oldVElement);
+            break;
+          case VDeltas.MOVE:
+            el.insertBefore(patch(el, newVElement!, oldVElement), el.childNodes[position!]);
+            break;
+          case VDeltas.REMOVE:
+            el.removeChild(<HTMLElement>el.childNodes[position!]);
+            break;
+        }
+      },
+    );
+  } else {
+    if (oldVNodeChildren) {
+      for (let i = oldVNodeChildren.length - 1; i >= 0; --i) {
+        patch(<HTMLElement | Text>el.childNodes[i], newVNodeChildren[i], oldVNodeChildren[i]);
+      }
     }
-  }
-  for (let i = oldVNodeChildren.length ?? 0; i < newVNodeChildren.length; ++i) {
-    el.appendChild(createElement(newVNodeChildren[i], false));
+    for (let i = oldVNodeChildren?.length ?? 0; i < newVNodeChildren.length; ++i) {
+      el.appendChild(createElement(newVNodeChildren[i], false));
+    }
   }
 };
 
@@ -109,7 +136,12 @@ export const patch = (
             break;
           }
           default: {
-            patchChildren(el, (<VElement>oldVNode).children || [], (<VElement>newVNode).children!);
+            patchChildren(
+              el,
+              (<VElement>oldVNode).children || [],
+              (<VElement>newVNode).children!,
+              <VFlags>(<VElement>newVNode).flag === VFlags.KEYED_CHILDREN,
+            );
             break;
           }
         }
