@@ -20,10 +20,17 @@ export const svg = (vnode: VElement): VElement => {
   return vnode;
 };
 
-export const ns = (tag: string, props: VProps, children?: VNode[]): void => {
+/**
+ * Ensures that a child that could either be a VNode element
+ * or an array of them is converted into an array for iteration
+ * @param a - the item or array to convert
+ */
+export const ensureVNodeArray = (a: VNode | VNode[]): VNode[] => (Array.isArray(a) ? a : [a]);
+
+export const ns = (tag: string, props: VProps, children?: VNode[] | VNode): void => {
   props.ns = 'http://www.w3.org/2000/svg';
   if (children && tag !== 'foreignObject') {
-    for (const child of children) {
+    for (const child of ensureVNodeArray(children)) {
       if (typeof child !== 'string' && child.props) ns(child.tag, child.props, child.children);
     }
   }
@@ -90,7 +97,7 @@ export const DELETE = (positionIdx = 0): VDeltaOperation => [
 export const m = (
   tag: string,
   props?: VProps,
-  children?: VNode[],
+  children?: VNode | VNode[],
   flag?: VFlags,
   delta?: VDelta,
 ): VElement => {
@@ -102,7 +109,7 @@ export const m = (
   return {
     tag,
     props,
-    children,
+    children: children ? ensureVNodeArray(children) : undefined,
     key,
     flag,
     delta,
