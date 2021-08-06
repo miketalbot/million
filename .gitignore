@@ -5,5 +5,7 @@ yarn.lock
 dev
 coverage
 docs
+.idea
+./package-lock.json
 .DS_Store
 .pnpm-debug.log
